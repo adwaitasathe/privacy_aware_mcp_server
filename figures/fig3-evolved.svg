@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 648" width="880" height="648" role="img" aria-labelledby="f3t f3d">
+<title id="f3t">The evolved MCP server</title>
+<desc id="f3d">Model context at the top receives only handles and shaped fields. Below it the MCP server holds five stage modules: classification, purpose scope, response shaping, boundary and audit. Stage six sits outside the request path, in CI. The internal REST API and backing systems below are unchanged.</desc>
+<style>
+  .bx{fill:#F2F4F5;stroke:#C9D0D6;stroke-width:1}
+  .shell{fill:#FFFFFF;stroke:#1F6F6B;stroke-width:1.4}
+  .mod{fill:#E6F0EF;stroke:#1F6F6B;stroke-width:1}
+  .ci{fill:#F7E9E4;stroke:#A6462F;stroke-width:1}
+  .h{font:600 14px 'IBM Plex Sans',system-ui,sans-serif;fill:#16191C}
+  .hs{font:600 14px 'IBM Plex Sans',system-ui,sans-serif;fill:#1F6F6B}
+  .hr{font:600 14px 'IBM Plex Sans',system-ui,sans-serif;fill:#A6462F}
+  .st{font:600 13px 'IBM Plex Sans',system-ui,sans-serif;fill:#1F6F6B}
+  .s{font:400 12px 'IBM Plex Sans',system-ui,sans-serif;fill:#5A6470}
+  .sr{font:400 12px 'IBM Plex Sans',system-ui,sans-serif;fill:#A6462F}
+  .cap{font:400 12px 'IBM Plex Sans',system-ui,sans-serif;fill:#5A6470}
+  .ar{stroke:#5A6470;stroke-width:1.4;fill:none}
+  .ld{stroke:#C9D0D6;stroke-width:1;stroke-dasharray:3 3;fill:none}
+</style>
+<defs><marker id="f3a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#5A6470" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+
+<rect class="bx" x="60" y="36" width="420" height="56" rx="7"/>
+<text class="h" x="80" y="60">Model context</text><text class="s" x="80" y="78">handles and shaped fields only</text>
+<line class="ar" x1="270" y1="92" x2="270" y2="115" marker-end="url(#f3a)"/>
+
+<rect class="shell" x="60" y="120" width="420" height="338" rx="9"/>
+<text class="hs" x="80" y="148">havenware-support-mcp</text>
+
+<rect class="mod" x="80" y="166" width="380" height="48" rx="6"/>
+<text class="st" x="96" y="186">Stage 1 · classification</text>
+<text class="s" x="96" y="204">62 columns classified, CI fails on gaps</text>
+
+<rect class="mod" x="80" y="222" width="380" height="48" rx="6"/>
+<text class="st" x="96" y="242">Stage 2 · purpose scope</text>
+<text class="s" x="96" y="260">session identity, six intent-derived tools</text>
+
+<rect class="mod" x="80" y="278" width="380" height="48" rx="6"/>
+<text class="st" x="96" y="298">Stage 3 · response shaping</text>
+<text class="s" x="96" y="316">output-schema allowlist, row cap, session budget</text>
+
+<rect class="mod" x="80" y="334" width="380" height="48" rx="6"/>
+<text class="st" x="96" y="354">Stage 4 · boundary</text>
+<text class="s" x="96" y="372">token vault, confirmation forms, handles not values</text>
+
+<rect class="mod" x="80" y="390" width="380" height="48" rx="6"/>
+<text class="st" x="96" y="410">Stage 5 · audit</text>
+<text class="s" x="96" y="428">field classes and counts, never payloads</text>
+
+<line class="ld" x1="482" y1="284" x2="516" y2="284"/>
+<rect class="ci" x="520" y="252" width="250" height="64" rx="7"/>
+<text class="hr" x="540" y="276">Stage 6 · canary tests</text>
+<text class="sr" x="540" y="296">outside the request path, in CI</text>
+
+<line class="ar" x1="270" y1="458" x2="270" y2="481" marker-end="url(#f3a)"/>
+<rect class="bx" x="60" y="486" width="420" height="48" rx="7"/>
+<text class="h" x="80" y="506">Internal REST API</text><text class="s" x="80" y="524">unchanged</text>
+
+<line class="ar" x1="270" y1="534" x2="270" y2="555" marker-end="url(#f3a)"/>
+<rect class="bx" x="60" y="560" width="420" height="40" rx="7"/>
+<text class="h" x="80" y="585">Backing systems</text>
+
+<text class="cap" x="60" y="626">Every response passes through all five modules in order. A tool added next</text>
+<text class="cap" x="60" y="644">quarter inherits them, and fails the build if it skips its output schema.</text>
+</svg>

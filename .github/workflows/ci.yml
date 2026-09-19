@@ -1,0 +1,36 @@
+name: privacy gates
+
+# The article's argument, run as CI. Stage 1 fails the build on an
+# unclassified column; Stage 6 fails it on a leaked canary marker or a tool
+# with no declared output schema.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -r requirements.txt
+
+      - name: Seed synthetic fixtures
+        run: python fixtures/seed.py
+
+      - name: "Stage 1 — every reachable column is classified"
+        run: python after/classification.py
+
+      - name: "Stage 6 — canary PII tests"
+        run: python -m pytest tests/ -q
+
+      - name: "Measure before and after"
+        run: python harness/measure.py
