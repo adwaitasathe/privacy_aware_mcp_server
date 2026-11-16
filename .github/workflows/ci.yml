@@ -1,8 +1,8 @@
 name: privacy gates
 
 # The article's argument, run as CI. Stage 1 fails the build on an
-# unclassified column; Stage 6 fails it on a leaked canary marker or a tool
-# with no declared output schema.
+# unclassified column; Stage 6 checks application field allowlists as well as
+# MCP-discovered schemas, serialized results, errors and canary markers.
 
 on:
   push:
@@ -29,7 +29,7 @@ jobs:
       - name: "Stage 1 — every reachable column is classified"
         run: python after/classification.py
 
-      - name: "Stage 6 — canary PII tests"
+      - name: "Stage 6 — application and MCP protocol privacy tests"
         run: python -m pytest tests/ -q
 
       - name: "Measure before and after"

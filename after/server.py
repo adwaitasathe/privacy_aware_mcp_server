@@ -19,6 +19,7 @@ sys.path.insert(0, str(_root / "after"))
 
 import internal_api  # noqa: E402
 import boundary  # noqa: E402
+from contracts import OUTPUT_SCHEMAS  # noqa: E402
 from session import Session, current_subject, current_session  # noqa: E402
 from shaping import shaped  # noqa: E402
 
@@ -202,7 +203,7 @@ TOOLS = {
 }
 
 for _name, _fn in TOOLS.items():
-    mcp.tool(_fn)
+    mcp.tool(_fn, output_schema=OUTPUT_SCHEMAS[_name])
 
 
 if __name__ == "__main__":
