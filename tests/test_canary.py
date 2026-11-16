@@ -2,10 +2,11 @@
 
 Synthetic markers are seeded into the fixture database. The assertions below
 say those markers must not appear in tool output, in logs, or in exception
-messages -- and the tools under test are enumerated from the server's own
-registry, so a tool added next quarter is covered without anyone remembering.
+messages. These unit tests enumerate the application's TOOLS dictionary and
+call its Python wrappers directly, not the MCP interface. Protocol discovery,
+schemas and serialized results are covered separately in test_mcp_protocol.py.
 
-What this catches: a known field escaping through a declared output schema, a
+What this catches: a known field escaping an application field allowlist, a
 payload reaching a log, a row leaking through an exception string.
 
 What it does not catch: anything in free text, and absence in general. A test
@@ -56,7 +57,7 @@ def _clean():
 
 
 def _call_all(order_ref: str, ticket_ref: str = "HW-T0000"):
-    """Invoke every registered tool, whatever it is."""
+    """Invoke each application wrapper using this fixture's argument cases."""
     out = []
     for name, fn in after_server.TOOLS.items():
         try:
@@ -72,7 +73,7 @@ def _call_all(order_ref: str, ticket_ref: str = "HW-T0000"):
 
 
 def test_no_other_subject_in_output():
-    """A caller cannot reach another customer through any registered tool."""
+    """Application wrappers exclude another customer's private canaries."""
     with Session(CANARY_SELF["id"]) as s:
         shaping.reset_budget(s.session_id)
         results = _call_all(OTHER_ORDER)
@@ -83,7 +84,7 @@ def test_no_other_subject_in_output():
 
 
 def test_no_undeclared_self_fields_in_output():
-    """Even the subject's own record only crosses where a schema declared it."""
+    """The subject's email, phone and full address stay out of these results."""
     with Session(CANARY_SELF["id"]) as s:
         shaping.reset_budget(s.session_id)
         results = _call_all(SELF_ORDER)
@@ -124,11 +125,11 @@ def test_no_canary_in_exception_messages(bad_ref):
     assert not _leaks(" ".join(messages)), messages
 
 
-def test_every_tool_declares_an_output_schema():
-    """Fail closed: a tool without a declared schema is a build failure."""
+def test_every_tool_declares_a_field_allowlist():
+    """Require application metadata; this is not an MCP schema assertion."""
     undeclared = [name for name, fn in after_server.TOOLS.items()
                   if not getattr(fn, "returns", None)]
-    assert not undeclared, f"tools with no output schema: {undeclared}"
+    assert not undeclared, f"tools with no field allowlist: {undeclared}"
 
 
 SELF_TICKET = f"HW-TC{CANARY_SELF['id'][-4:]}"
