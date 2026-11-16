@@ -14,6 +14,9 @@ per call; you need both.
 
 import collections
 import functools
+import typing
+
+from pydantic import ConfigDict, with_config
 
 from classification import PERSONAL, classify
 
@@ -45,20 +48,92 @@ def _prune(value, allowed: dict):
     return out
 
 
-def _row_count(value) -> int:
+def _cap(value):
+    """Trim every list in the response to ROW_CAP, at every level.
+
+    A purpose tool usually returns an object, and the rows it carries sit in a
+    list inside it (list_order_items -> {"order_ref": ..., "items": [...]}).
+    Capping only a top-level list would leave those uncapped.
+    """
     if isinstance(value, list):
-        return max(1, len(value))
+        return [_cap(v) for v in value[:ROW_CAP]]
+    if isinstance(value, dict):
+        return {k: _cap(v) for k, v in value.items()}
+    return value
+
+
+def _row_count(value) -> int:
+    """Rows a response carries, counted at every level.
+
+    An object with no lists in it is one row. An object wrapping a list of
+    fifty items is fifty rows, not one, so the session budget sees what
+    actually crossed.
+    """
+    if isinstance(value, list):
+        return max(1, sum(_row_count(v) for v in value))
+    if isinstance(value, dict):
+        nested = [v for v in value.values() if isinstance(v, list)]
+        return max(1, sum(_row_count(v) for v in nested)) if nested else 1
     return 1
 
 
-def shaped(*, returns: dict, columns: dict[str, str], purpose: str):
+def contract(cls):
+    """Mark a TypedDict as a tool's output contract.
+
+    The contract is closed: its JSON schema says `additionalProperties: false`,
+    so an MCP client reading the tool definition is told that no other field
+    will appear. Contracts nest -- a field typed as another contract, or a list
+    of one, is described field by field too.
+    """
+    return with_config(ConfigDict(extra="forbid"))(cls)
+
+
+def _is_contract(tp) -> bool:
+    return isinstance(tp, type) and typing.is_typeddict(tp)
+
+
+def allowlist(cls) -> dict:
+    """Turn a contract into the nested allowlist `_prune` enforces.
+
+    One declaration, two uses: this allowlist is what the middleware keeps, and
+    the same TypedDict, as the tool's return type, is what FastMCP publishes as
+    the tool's MCP `outputSchema`. They cannot drift apart.
+    """
+    out = {}
+    for name, tp in typing.get_type_hints(cls).items():
+        tp = _unwrap(tp)
+        if _is_contract(tp):
+            out[name] = allowlist(tp)
+        elif typing.get_origin(tp) is list and typing.get_args(tp) \
+                and _is_contract(_unwrap(typing.get_args(tp)[0])):
+            out[name] = allowlist(_unwrap(typing.get_args(tp)[0]))
+        else:
+            out[name] = 1
+    return out
+
+
+def _unwrap(tp):
+    """Strip NotRequired[...] / Required[...] so the inner type is visible."""
+    while typing.get_origin(tp) in (typing.NotRequired, typing.Required):
+        tp = typing.get_args(tp)[0]
+    return tp
+
+
+def shaped(*, returns: type, columns: dict[str, str], purpose: str):
     """Declare a tool's output contract.
 
-    `returns` is the field allowlist -- nested dicts describe nested objects.
+    `returns` is a TypedDict marked with @contract. The middleware keeps only
+    the fields it declares, and the decorated function must use the same
+    TypedDict as its return type so the MCP tool definition advertises exactly
+    the fields that can cross.
     `columns` maps each returned field to the source column it came from, so
     the audit trail can record which data classes crossed the boundary without
     recording any values.
     """
+    if not _is_contract(returns):
+        raise TypeError("returns must be a TypedDict output contract")
+    fields = allowlist(returns)
+
     def decorator(fn):
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
@@ -68,10 +143,9 @@ def shaped(*, returns: dict, columns: dict[str, str], purpose: str):
             if result is None:
                 return None
 
-            shaped_result = _prune(result, returns)
+            shaped_result = _prune(result, fields)
 
-            if isinstance(shaped_result, list) and len(shaped_result) > ROW_CAP:
-                shaped_result = shaped_result[:ROW_CAP]
+            shaped_result = _cap(shaped_result)
 
             sid = current_session()
             rows = _row_count(shaped_result)
@@ -87,6 +161,7 @@ def shaped(*, returns: dict, columns: dict[str, str], purpose: str):
             return shaped_result
 
         wrapper.returns = returns
+        wrapper.allowlist = fields
         wrapper.columns = columns
         wrapper.purpose = purpose
         return wrapper
