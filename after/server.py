@@ -162,6 +162,9 @@ def get_open_ticket() -> dict | None:
 
 
 # --- "get me a human" / reply -------------------------------------------
+FIRST_NAME_PLACEHOLDER = "{first_name}"
+
+
 @shaped(
     returns={"delivered": 1, "ticket_ref": 1},
     columns={"delivered": "tickets.status", "ticket_ref": "tickets.ticket_ref"},
@@ -172,7 +175,20 @@ def send_reply(ticket_ref: str, body: str) -> dict:
 
     The address is resolved inside the internal API, at the moment of sending.
     It is never a parameter, never a return value, and never in context.
+
+    The customer's first name is handled the same way. The model only needs it
+    in the outgoing message, not to reason about the task, so it writes the
+    placeholder {first_name} and the server fills it in here. The name never
+    enters context.
     """
+    ticket = internal_api.get_ticket(ticket_ref)
+    if not ticket or ticket["customer_id"] != current_subject():
+        # Fenced by the session subject, like every order lookup. Without this
+        # the server would fill in this customer's name and send it to
+        # whoever owns the ticket.
+        return {"delivered": False, "ticket_ref": ticket_ref}
+    customer = internal_api.get_customer(current_subject())
+    body = body.replace(FIRST_NAME_PLACEHOLDER, customer["first_name"])
     return internal_api.post_reply(ticket_ref, body)
 
 

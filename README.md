@@ -79,7 +79,9 @@ One ticket, one sentence:
 > mother's surgery on the 14th.
 
 Answering it needs three things: the shipment status on one order, the promised
-date, and the customer's first name.
+date, and the customer's first name. The model needs only the first two. The
+name is needed only in the outgoing reply, so the model writes `{first_name}`
+and `send_reply` fills it in on the server. The name never enters context.
 
 ## CI
 
