@@ -17,7 +17,7 @@ model context. The separate protocol tests exercise the MCP interface.
 Rows returned                   25  ->  2
 Distinct application fields     49  ->  9
 Third-party subjects exposed     1  ->  0
-Application-result JSON     22,214  ->  453 bytes
+Application-result JSON     22,214  ->  455 bytes
 Captured log text           22,305  ->  445 characters
 Log contains response payloads yes  ->  no
 Health disclosure in context   yes  ->  yes
@@ -71,8 +71,9 @@ Other files:
   authorization bug.
 - `harness/measure.py` — runs the same customer task against both and prints
   the comparison.
-- `after/contracts.py` — explicit MCP output JSON Schemas, separate from the
-  `@shaped` decorator's application field allowlists.
+- Output contracts — each tool in `after/server.py` declares its output once,
+  as a closed TypedDict. `@shaped` builds its field allowlist from it, and
+  FastMCP publishes the same type as the tool's MCP `outputSchema`.
 - [`docs/article-listing-4.md`](docs/article-listing-4.md) — corrected article
   excerpt showing the ticket handle being resolved and ownership checked
   before sending a reply.

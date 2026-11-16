@@ -8,11 +8,13 @@ turning into one tool per field.
 The internal REST API underneath is unchanged. It did not need to change.
 """
 
+import copy
 import sys
 from pathlib import Path
-from typing import NotRequired, TypedDict
+from typing import TypedDict
 
 from fastmcp import FastMCP
+from fastmcp.tools import Tool
 
 _root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_root))
@@ -20,7 +22,6 @@ sys.path.insert(0, str(_root / "after"))
 
 import internal_api  # noqa: E402
 import boundary  # noqa: E402
-from contracts import OUTPUT_SCHEMAS  # noqa: E402
 from session import (  # noqa: E402
     Session, current_session, current_subject, on_session_close)
 import shaping  # noqa: E402
@@ -90,7 +91,7 @@ class OpenTicket(TypedDict):
 @contract
 class ReplyResult(TypedDict):
     delivered: bool
-    ticket_ref: NotRequired[str]
+    ticket_ref: str               # always the handle, never the internal ref
 
 
 def _own_order(order_ref: str) -> dict | None:
@@ -278,6 +279,19 @@ def send_reply(ticket_ref: str, body: str) -> ReplyResult:
     return {"delivered": bool(sent["delivered"]), "ticket_ref": ticket_ref}
 
 
+def published_schema(fn) -> dict:
+    """The tool's MCP outputSchema, derived from its return annotation.
+
+    The annotation is the same closed TypedDict that @shaped builds its
+    allowlist from, so there is one declaration. FastMCP wraps an optional
+    result in a {"result": ...} envelope and leaves that envelope open; it is
+    closed here so a client is told no other top-level field will appear.
+    """
+    schema = copy.deepcopy(Tool.from_function(fn).output_schema)
+    schema["additionalProperties"] = False
+    return schema
+
+
 TOOLS = {
     "get_shipment_status": get_shipment_status,
     "get_order_summary": get_order_summary,
@@ -288,7 +302,7 @@ TOOLS = {
 }
 
 for _name, _fn in TOOLS.items():
-    mcp.tool(_fn, output_schema=OUTPUT_SCHEMAS[_name])
+    mcp.tool(_fn, output_schema=published_schema(_fn))
 
 
 if __name__ == "__main__":
