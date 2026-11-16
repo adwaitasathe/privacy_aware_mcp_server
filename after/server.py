@@ -10,6 +10,7 @@ The internal REST API underneath is unchanged. It did not need to change.
 
 import sys
 from pathlib import Path
+from typing import NotRequired, TypedDict
 
 from fastmcp import FastMCP
 
@@ -21,9 +22,68 @@ import internal_api  # noqa: E402
 import boundary  # noqa: E402
 from contracts import OUTPUT_SCHEMAS  # noqa: E402
 from session import Session, current_subject, current_session  # noqa: E402
-from shaping import shaped  # noqa: E402
+from shaping import contract, shaped  # noqa: E402
 
 mcp = FastMCP("havenware-support")
+
+
+# --- output contracts -----------------------------------------------------
+# One declaration per tool. @shaped builds its field allowlist from it, and
+# the same type, as the tool's return annotation, is what FastMCP publishes as
+# the tool's MCP outputSchema. Contracts are closed: the advertised schema
+# says no other field will appear, and the middleware makes that true.
+
+@contract
+class ShipmentStatus(TypedDict):
+    order_ref: str
+    status: str
+    promised_date: str
+    last_event_desc: str
+    last_event_at: str
+    delivering_to: str          # confirmation form, never the address
+
+
+@contract
+class OrderSummary(TypedDict):
+    order_ref: str
+    placed_at: str
+    status: str
+    item_count: int
+    is_gift: bool               # that a gift exists, never who it was for
+
+
+@contract
+class OrderItem(TypedDict):
+    product_name: str
+    qty: int
+
+
+@contract
+class OrderContents(TypedDict):
+    order_ref: str
+    items: list[OrderItem]
+
+
+@contract
+class RefundStatus(TypedDict):
+    order_ref: str
+    status: str
+    paid_with: str              # "the visa card ending 4242"
+
+
+@contract
+class OpenTicket(TypedDict):
+    ticket_ref: str
+    status: str
+    opened: str
+    order_ref: str
+    latest_message: str         # bounded, scrubbed snippet
+
+
+@contract
+class ReplyResult(TypedDict):
+    delivered: bool
+    ticket_ref: NotRequired[str]
 
 
 def _own_order(order_ref: str) -> dict | None:
@@ -36,8 +96,7 @@ def _own_order(order_ref: str) -> dict | None:
 
 # --- "where is my order" ------------------------------------------------
 @shaped(
-    returns={"order_ref": 1, "status": 1, "promised_date": 1,
-             "last_event_desc": 1, "last_event_at": 1, "delivering_to": 1},
+    returns=ShipmentStatus,
     columns={"order_ref": "orders.order_ref",
              "status": "shipments.status",
              "promised_date": "shipments.promised_date",
@@ -46,7 +105,7 @@ def _own_order(order_ref: str) -> dict | None:
              "delivering_to": "orders.ship_postal"},
     purpose="delivery_status",
 )
-def get_shipment_status(order_ref: str) -> dict | None:
+def get_shipment_status(order_ref: str) -> ShipmentStatus | None:
     """Check where a delivery has got to."""
     order = _own_order(order_ref)
     if not order or not order["shipment"]:
@@ -66,14 +125,13 @@ def get_shipment_status(order_ref: str) -> dict | None:
 
 # --- "what did I order" -------------------------------------------------
 @shaped(
-    returns={"order_ref": 1, "placed_at": 1, "status": 1, "item_count": 1,
-             "is_gift": 1},
+    returns=OrderSummary,
     columns={"order_ref": "orders.order_ref", "placed_at": "orders.placed_at",
              "status": "orders.status", "item_count": "order_items.qty",
              "is_gift": "orders.is_gift"},
     purpose="order_summary",
 )
-def get_order_summary(order_ref: str) -> dict | None:
+def get_order_summary(order_ref: str) -> OrderSummary | None:
     """Summarise an order without listing what was in it.
 
     Item names are classified sensitive_by_content. A grab rail or a pregnancy
@@ -97,13 +155,13 @@ def get_order_summary(order_ref: str) -> dict | None:
 
 # --- "what was in the box" ----------------------------------------------
 @shaped(
-    returns={"order_ref": 1, "items": {"product_name": 1, "qty": 1}},
+    returns=OrderContents,
     columns={"order_ref": "orders.order_ref",
              "product_name": "order_items.product_name",
              "qty": "order_items.qty"},
     purpose="order_contents",
 )
-def list_order_items(order_ref: str) -> dict | None:
+def list_order_items(order_ref: str) -> OrderContents | None:
     """List what was in an order, when the customer has asked."""
     order = _own_order(order_ref)
     if not order:
@@ -115,12 +173,12 @@ def list_order_items(order_ref: str) -> dict | None:
 
 # --- "where's my refund" ------------------------------------------------
 @shaped(
-    returns={"order_ref": 1, "status": 1, "paid_with": 1},
+    returns=RefundStatus,
     columns={"order_ref": "charges.order_ref", "status": "charges.status",
              "paid_with": "charges.card_last4"},
     purpose="refund_status",
 )
-def get_refund_status(order_ref: str) -> dict | None:
+def get_refund_status(order_ref: str) -> RefundStatus | None:
     """Check the payment or refund state of an order."""
     order = _own_order(order_ref)
     if not order or not order["charge"]:
@@ -133,14 +191,13 @@ def get_refund_status(order_ref: str) -> dict | None:
 
 # --- "what did I write in" about ----------------------------------------
 @shaped(
-    returns={"ticket_ref": 1, "status": 1, "opened": 1, "order_ref": 1,
-             "latest_message": 1},
+    returns=OpenTicket,
     columns={"ticket_ref": "tickets.ticket_ref", "status": "tickets.status",
              "opened": "tickets.created_at", "order_ref": "tickets.order_ref",
              "latest_message": "ticket_messages.body"},
     purpose="ticket_context",
 )
-def get_open_ticket() -> dict | None:
+def get_open_ticket() -> OpenTicket | None:
     """Fetch the customer's currently open ticket, if there is one.
 
     One ticket, not a history. The last message, not the thread. The snippet
@@ -167,11 +224,11 @@ FIRST_NAME_PLACEHOLDER = "{first_name}"
 
 
 @shaped(
-    returns={"delivered": 1, "ticket_ref": 1},
+    returns=ReplyResult,
     columns={"delivered": "tickets.status", "ticket_ref": "tickets.ticket_ref"},
     purpose="reply",
 )
-def send_reply(ticket_ref: str, body: str) -> dict:
+def send_reply(ticket_ref: str, body: str) -> ReplyResult:
     """Reply to the customer on their open ticket.
 
     The address is resolved inside the internal API, at the moment of sending.
