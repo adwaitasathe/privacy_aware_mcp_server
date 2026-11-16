@@ -45,9 +45,32 @@ def _prune(value, allowed: dict):
     return out
 
 
-def _row_count(value) -> int:
+def _cap(value):
+    """Trim every list in the response to ROW_CAP, at every level.
+
+    A purpose tool usually returns an object, and the rows it carries sit in a
+    list inside it (list_order_items -> {"order_ref": ..., "items": [...]}).
+    Capping only a top-level list would leave those uncapped.
+    """
     if isinstance(value, list):
-        return max(1, len(value))
+        return [_cap(v) for v in value[:ROW_CAP]]
+    if isinstance(value, dict):
+        return {k: _cap(v) for k, v in value.items()}
+    return value
+
+
+def _row_count(value) -> int:
+    """Rows a response carries, counted at every level.
+
+    An object with no lists in it is one row. An object wrapping a list of
+    fifty items is fifty rows, not one, so the session budget sees what
+    actually crossed.
+    """
+    if isinstance(value, list):
+        return max(1, sum(_row_count(v) for v in value))
+    if isinstance(value, dict):
+        nested = [v for v in value.values() if isinstance(v, list)]
+        return max(1, sum(_row_count(v) for v in nested)) if nested else 1
     return 1
 
 
@@ -70,8 +93,7 @@ def shaped(*, returns: dict, columns: dict[str, str], purpose: str):
 
             shaped_result = _prune(result, returns)
 
-            if isinstance(shaped_result, list) and len(shaped_result) > ROW_CAP:
-                shaped_result = shaped_result[:ROW_CAP]
+            shaped_result = _cap(shaped_result)
 
             sid = current_session()
             rows = _row_count(shaped_result)
