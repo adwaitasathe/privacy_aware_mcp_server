@@ -129,3 +129,35 @@ def test_every_tool_declares_an_output_schema():
     undeclared = [name for name, fn in after_server.TOOLS.items()
                   if not getattr(fn, "returns", None)]
     assert not undeclared, f"tools with no output schema: {undeclared}"
+
+
+SELF_TICKET = f"HW-TC{CANARY_SELF['id'][-4:]}"
+OTHER_TICKET = f"HW-TC{CANARY_OTHER['id'][-4:]}"
+
+
+def test_reply_fills_first_name_on_server():
+    """The model writes a placeholder; the name is filled in server side.
+
+    The name reaches the stored reply, and never the tool result.
+    """
+    import internal_api
+    with Session(CANARY_SELF["id"]) as s:
+        shaping.reset_budget(s.session_id)
+        result = after_server.send_reply(
+            SELF_TICKET, "Hi {first_name}, your order is on its way.")
+    assert result["delivered"] is True
+    assert CANARY_SELF["first_name"] not in json.dumps(result)
+    sent = internal_api.get_ticket(SELF_TICKET)["messages"][-1]["body"]
+    assert sent == f"Hi {CANARY_SELF['first_name']}, your order is on its way."
+
+
+def test_reply_refuses_another_customers_ticket():
+    """send_reply is fenced by the session subject, like every order lookup."""
+    import internal_api
+    before = len(internal_api.get_ticket(OTHER_TICKET)["messages"])
+    with Session(CANARY_SELF["id"]) as s:
+        shaping.reset_budget(s.session_id)
+        result = after_server.send_reply(OTHER_TICKET, "Hi {first_name}")
+    assert result["delivered"] is False
+    after = internal_api.get_ticket(OTHER_TICKET)["messages"]
+    assert len(after) == before
