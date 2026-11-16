@@ -7,15 +7,16 @@ in Listing 4. Keep the separate `address_confirmation` example below it.
 
 This is a documentation correction. The runtime ownership check was introduced
 in [PR #1](https://github.com/adwaitasathe/privacy_aware_mcp_server/pull/1).
-The surrounding server supplies `shaped`, `current_subject`, and `internal_api`.
+The surrounding server supplies `shaped`, `current_subject`, `internal_api`, and
+the existing `ReplyResult` output contract.
 
 ```python
 @shaped(
-    returns={"delivered": 1, "ticket_ref": 1},
+    returns=ReplyResult,
     columns={"delivered": "tickets.status", "ticket_ref": "tickets.ticket_ref"},
     purpose="reply",
 )
-def send_reply(ticket_ref: str, body: str) -> dict:
+def send_reply(ticket_ref: str, body: str) -> ReplyResult:
     """Authorize the ticket before personalizing or sending a reply."""
     ticket = internal_api.get_ticket(ticket_ref)
     if not ticket or ticket["customer_id"] != current_subject():
