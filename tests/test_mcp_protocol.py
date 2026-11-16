@@ -145,27 +145,37 @@ def test_mcp_catalog_advertises_closed_schemas(database, tmp_path):
     asyncio.run(run())
 
 
-@pytest.mark.parametrize("target", ["self", "other", "missing"])
+@pytest.mark.parametrize("target", ["self", "raw_ref", "other", "missing"])
 def test_mcp_results_for_every_registered_tool(database, tmp_path, target):
     async def run():
-        order, ticket = {
-            "self": (SELF_ORDER, SELF_TICKET),
-            "other": (OTHER_ORDER, OTHER_TICKET),
-            "missing": ("HW-missing", "HW-Tmissing"),
-        }[target]
         async with connected(database, tmp_path) as client:
             tools = await client.list_tools()
             assert {tool.name for tool in tools} == set(FIELDS)
+            # An agent learns the ticket handle from get_open_ticket, then acts
+            # on it. "raw_ref" passes the customer's own internal ref instead,
+            # which must be refused: actions take the handle the server issued.
+            opened = await client.call_tool_mcp("get_open_ticket", {})
+            handle = opened.structured_content["result"]["ticket_ref"]
+            order, ticket = {
+                "self": (SELF_ORDER, handle),
+                "raw_ref": (SELF_ORDER, SELF_TICKET),
+                "other": (OTHER_ORDER, OTHER_TICKET),
+                "missing": ("HW-missing", "tkt_000000"),
+            }[target]
             for tool in tools:
                 result = await client.call_tool_mcp(
                     tool.name, arguments_for(tool.name, order, ticket))
                 payload = check_result(tool, result)
                 if tool.name == "send_reply":
                     assert payload["delivered"] is (target == "self")
+                    assert payload["ticket_ref"] == ticket
                 elif tool.name == "get_open_ticket":
-                    assert payload["ticket_ref"] == SELF_TICKET
+                    # A session-scoped handle, never the internal ref.
+                    assert payload["ticket_ref"] == handle
+                    assert payload["ticket_ref"].startswith("tkt_")
+                    assert SELF_TICKET not in result.model_dump_json()
                     assert "[email removed]" in payload["latest_message"]
-                elif target == "self":
+                elif target in ("self", "raw_ref"):
                     assert payload["order_ref"] == SELF_ORDER
                 else:
                     assert payload is None

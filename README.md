@@ -74,7 +74,8 @@ Other files:
 - `after/contracts.py` — explicit MCP output JSON Schemas, separate from the
   `@shaped` decorator's application field allowlists.
 - [`docs/article-listing-4.md`](docs/article-listing-4.md) — corrected article
-  excerpt showing the existing ticket-ownership check before sending a reply.
+  excerpt showing the ticket handle being resolved and ownership checked
+  before sending a reply.
 - `figures/` — the article's diagrams as SVG.
 
 ## The task everything measures
