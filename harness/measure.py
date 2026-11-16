@@ -128,7 +128,6 @@ def run_after():
         shaping.reset_budget(s.session_id)
         payloads.append(after_server.get_open_ticket())
         payloads.append(after_server.get_shipment_status(SUBJECT_ORDER))
-        boundary.discard(s.session_id)
 
     log.removeHandler(capture)
 

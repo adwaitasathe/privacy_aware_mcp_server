@@ -15,6 +15,18 @@ import secrets
 _subject = contextvars.ContextVar("subject_id")
 _session = contextvars.ContextVar("session_id")
 
+# Called with the session id when a session closes. Session state that lives
+# beyond a request -- the token vault, the row budget -- registers here, so it
+# is dropped when the session ends rather than whenever someone remembers.
+_on_close: list = []
+
+
+def on_session_close(fn):
+    """Register fn(session_id) to run when any session closes."""
+    if fn not in _on_close:
+        _on_close.append(fn)
+    return fn
+
 
 class Session:
     """Binds a verified subject to a request scope."""
@@ -30,8 +42,12 @@ class Session:
         return self
 
     def __exit__(self, *exc):
-        _subject.reset(self._tokens[0])
-        _session.reset(self._tokens[1])
+        try:
+            for fn in _on_close:
+                fn(self.session_id)
+        finally:
+            _subject.reset(self._tokens[0])
+            _session.reset(self._tokens[1])
         return False
 
 

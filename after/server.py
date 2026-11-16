@@ -21,10 +21,17 @@ sys.path.insert(0, str(_root / "after"))
 import internal_api  # noqa: E402
 import boundary  # noqa: E402
 from contracts import OUTPUT_SCHEMAS  # noqa: E402
-from session import Session, current_subject, current_session  # noqa: E402
+from session import (  # noqa: E402
+    Session, current_session, current_subject, on_session_close)
+import shaping  # noqa: E402
 from shaping import contract, shaped  # noqa: E402
 
 mcp = FastMCP("havenware-support")
+
+# When a session ends, its token mappings and its row budget go with it. The
+# vault's TTL is the session, not a retention period.
+on_session_close(boundary.discard)
+on_session_close(shaping.reset_budget)
 
 
 # --- output contracts -----------------------------------------------------
