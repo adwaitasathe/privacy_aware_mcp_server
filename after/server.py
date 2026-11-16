@@ -210,6 +210,11 @@ def get_open_ticket() -> OpenTicket | None:
     One ticket, not a history. The last message, not the thread. The snippet
     that does cross is scrubbed as a backstop -- customers paste contact
     details into tickets constantly, and no classification catches that.
+
+    The ticket reference comes back as a session-scoped handle (tkt_...), not
+    the internal ref. The model only needs it to act on the ticket, and
+    send_reply resolves it on the server. A handle is meaningless outside this
+    session and stops resolving when the session closes.
     """
     tickets = [t for t in internal_api.list_tickets(current_subject())
                if t["status"] == "open"]
@@ -218,7 +223,8 @@ def get_open_ticket() -> OpenTicket | None:
     t = tickets[0]
     last = t["messages"][-1] if t["messages"] else None
     return {
-        "ticket_ref": t["ticket_ref"],
+        "ticket_ref": boundary.tokenise(current_session(), t["ticket_ref"],
+                                        kind=TICKET_HANDLE),
         "status": t["status"],
         "opened": t["created_at"],
         "order_ref": t["order_ref"],
@@ -228,6 +234,7 @@ def get_open_ticket() -> OpenTicket | None:
 
 # --- "get me a human" / reply -------------------------------------------
 FIRST_NAME_PLACEHOLDER = "{first_name}"
+TICKET_HANDLE = "tkt"
 
 
 @shaped(
@@ -238,6 +245,10 @@ FIRST_NAME_PLACEHOLDER = "{first_name}"
 def send_reply(ticket_ref: str, body: str) -> ReplyResult:
     """Reply to the customer on their open ticket.
 
+    `ticket_ref` is the handle get_open_ticket returned. It is resolved here,
+    on the server; a raw internal ref, a handle from another session, or a
+    handle from a session that has ended does not resolve, and nothing is sent.
+
     The address is resolved inside the internal API, at the moment of sending.
     It is never a parameter, never a return value, and never in context.
 
@@ -246,15 +257,25 @@ def send_reply(ticket_ref: str, body: str) -> ReplyResult:
     placeholder {first_name} and the server fills it in here. The name never
     enters context.
     """
-    ticket = internal_api.get_ticket(ticket_ref)
+    refused = {"delivered": False, "ticket_ref": ticket_ref}
+    if not isinstance(ticket_ref, str) or \
+            not ticket_ref.startswith(TICKET_HANDLE + "_"):
+        return refused
+    try:
+        internal_ref = boundary.resolve(current_session(), ticket_ref)
+    except KeyError:
+        return refused
+    ticket = internal_api.get_ticket(internal_ref)
     if not ticket or ticket["customer_id"] != current_subject():
-        # Fenced by the session subject, like every order lookup. Without this
-        # the server would fill in this customer's name and send it to
-        # whoever owns the ticket.
-        return {"delivered": False, "ticket_ref": ticket_ref}
+        # Fenced by the session subject, like every order lookup, even though
+        # the handle was issued to this session. Without this the server would
+        # fill in this customer's name and send it to whoever owns the ticket.
+        return refused
     customer = internal_api.get_customer(current_subject())
     body = body.replace(FIRST_NAME_PLACEHOLDER, customer["first_name"])
-    return internal_api.post_reply(ticket_ref, body)
+    sent = internal_api.post_reply(internal_ref, body)
+    # Hand back the handle, never the internal ref.
+    return {"delivered": bool(sent["delivered"]), "ticket_ref": ticket_ref}
 
 
 TOOLS = {

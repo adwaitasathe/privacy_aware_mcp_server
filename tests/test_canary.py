@@ -142,10 +142,13 @@ def test_reply_fills_first_name_on_server():
     The name reaches the stored reply, and never the tool result.
     """
     import internal_api
+    import boundary
     with Session(CANARY_SELF["id"]) as s:
         shaping.reset_budget(s.session_id)
+        # The handle get_open_ticket would hand the model for this ticket.
+        handle = boundary.tokenise(s.session_id, SELF_TICKET, kind="tkt")
         result = after_server.send_reply(
-            SELF_TICKET, "Hi {first_name}, your order is on its way.")
+            handle, "Hi {first_name}, your order is on its way.")
     assert result["delivered"] is True
     assert CANARY_SELF["first_name"] not in json.dumps(result)
     sent = internal_api.get_ticket(SELF_TICKET)["messages"][-1]["body"]
@@ -162,3 +165,64 @@ def test_reply_refuses_another_customers_ticket():
     assert result["delivered"] is False
     after = internal_api.get_ticket(OTHER_TICKET)["messages"]
     assert len(after) == before
+
+
+def _messages(ticket_ref):
+    import internal_api
+    return len(internal_api.get_ticket(ticket_ref)["messages"])
+
+
+def test_reply_refuses_a_raw_internal_ref():
+    """Actions take the handle the server issued, not the internal ref."""
+    before = _messages(SELF_TICKET)
+    with Session(CANARY_SELF["id"]) as s:
+        shaping.reset_budget(s.session_id)
+        result = after_server.send_reply(SELF_TICKET, "Hi {first_name}")
+    assert result["delivered"] is False
+    assert _messages(SELF_TICKET) == before
+
+
+def test_reply_refuses_a_handle_from_another_session():
+    import boundary
+    with Session(CANARY_SELF["id"]) as first:
+        handle = boundary.tokenise(first.session_id, SELF_TICKET, kind="tkt")
+        before = _messages(SELF_TICKET)
+        with Session(CANARY_SELF["id"]) as second:
+            shaping.reset_budget(second.session_id)
+            result = after_server.send_reply(handle, "Hi {first_name}")
+    assert result["delivered"] is False
+    assert _messages(SELF_TICKET) == before
+
+
+def test_reply_refuses_a_handle_after_the_session_closes():
+    import boundary
+    with Session(CANARY_SELF["id"]) as s:
+        handle = boundary.tokenise(s.session_id, SELF_TICKET, kind="tkt")
+    before = _messages(SELF_TICKET)
+    with Session(CANARY_SELF["id"]) as later:
+        shaping.reset_budget(later.session_id)
+        result = after_server.send_reply(handle, "Hi {first_name}")
+    assert result["delivered"] is False
+    assert _messages(SELF_TICKET) == before
+
+
+def test_reply_checks_ownership_even_for_an_issued_handle():
+    """A handle issued in this session for someone else's ticket is still
+    refused: resolving the handle is not the same as authorising the ticket."""
+    import boundary
+    before = _messages(OTHER_TICKET)
+    with Session(CANARY_SELF["id"]) as s:
+        shaping.reset_budget(s.session_id)
+        handle = boundary.tokenise(s.session_id, OTHER_TICKET, kind="tkt")
+        result = after_server.send_reply(handle, "Hi {first_name}")
+    assert result["delivered"] is False
+    assert _messages(OTHER_TICKET) == before
+
+
+def test_reply_returns_the_handle_never_the_internal_ref():
+    import boundary
+    with Session(CANARY_SELF["id"]) as s:
+        shaping.reset_budget(s.session_id)
+        handle = boundary.tokenise(s.session_id, SELF_TICKET, kind="tkt")
+        result = after_server.send_reply(handle, "test body")
+    assert result == {"delivered": True, "ticket_ref": handle}
