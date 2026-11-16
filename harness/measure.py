@@ -72,9 +72,10 @@ def profile(payloads: list, columns_for) -> dict:
                     cls = classify(col)
                 except KeyError:
                     continue
-                if cls in PERSONAL:
-                    classes.add(str(cls))
-                if cls is Class.THIRD_PARTY and value:
+                classes.update(str(c) for c in cls & PERSONAL)
+                # A third party is counted by the value that identifies them,
+                # not by every column that describes them.
+                if {Class.THIRD_PARTY, Class.DIRECT} <= cls and value:
                     subjects.add(str(value))
     blob = json.dumps(payloads)
     return {

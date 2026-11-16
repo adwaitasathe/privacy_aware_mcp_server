@@ -22,93 +22,123 @@ class Class(enum.StrEnum):
     NON_PERSONAL = "non_personal"
 
 
-REGISTRY: dict[str, Class] = {
+# A column carries one or more classes. The classes answer different
+# questions -- THIRD_PARTY says whose data it is, the others say what kind --
+# so a column can need more than one. Multiple classes are used only where
+# every value in the column is both: a gift recipient's name is always a third
+# party's direct identifier. Columns that are third-party data on some rows
+# only (a gift order's ship_line1) keep their usual class; a column-level
+# registry cannot tell rows apart.
+_RAW: dict[str, set[Class]] = {
     # customers
-    "customers.id": Class.QUASI,
-    "customers.email": Class.DIRECT,
-    "customers.phone": Class.DIRECT,
-    "customers.first_name": Class.DIRECT,
-    "customers.last_name": Class.DIRECT,
-    "customers.dob": Class.QUASI,
-    "customers.address_line1": Class.DIRECT,
-    "customers.city": Class.QUASI,
-    "customers.region": Class.QUASI,
-    "customers.postal_code": Class.QUASI,
-    "customers.country": Class.QUASI,
-    "customers.plan_tier": Class.QUASI,
-    "customers.lifetime_value_cents": Class.QUASI,
-    "customers.marketing_consent_email": Class.NON_PERSONAL,
-    "customers.marketing_consent_sms": Class.NON_PERSONAL,
-    "customers.cs_notes": Class.FREE_TEXT,
-    "customers.created_at": Class.QUASI,
+    "customers.id": {Class.QUASI},
+    "customers.email": {Class.DIRECT},
+    "customers.phone": {Class.DIRECT},
+    "customers.first_name": {Class.DIRECT},
+    "customers.last_name": {Class.DIRECT},
+    "customers.dob": {Class.QUASI},
+    "customers.address_line1": {Class.DIRECT},
+    "customers.city": {Class.QUASI},
+    "customers.region": {Class.QUASI},
+    "customers.postal_code": {Class.QUASI},
+    "customers.country": {Class.QUASI},
+    "customers.plan_tier": {Class.QUASI},
+    "customers.lifetime_value_cents": {Class.QUASI},
+    "customers.marketing_consent_email": {Class.NON_PERSONAL},
+    "customers.marketing_consent_sms": {Class.NON_PERSONAL},
+    "customers.cs_notes": {Class.FREE_TEXT},
+    "customers.created_at": {Class.QUASI},
 
     # orders
-    "orders.order_ref": Class.QUASI,
-    "orders.customer_id": Class.QUASI,
-    "orders.placed_at": Class.NON_PERSONAL,
-    "orders.status": Class.NON_PERSONAL,
-    "orders.total_cents": Class.NON_PERSONAL,
-    "orders.is_gift": Class.NON_PERSONAL,
-    "orders.gift_recipient_name": Class.THIRD_PARTY,
-    "orders.gift_message": Class.THIRD_PARTY,
-    "orders.ship_line1": Class.DIRECT,
-    "orders.ship_city": Class.QUASI,
-    "orders.ship_region": Class.QUASI,
-    "orders.ship_postal": Class.QUASI,
+    "orders.order_ref": {Class.QUASI},
+    "orders.customer_id": {Class.QUASI},
+    "orders.placed_at": {Class.NON_PERSONAL},
+    "orders.status": {Class.NON_PERSONAL},
+    "orders.total_cents": {Class.NON_PERSONAL},
+    "orders.is_gift": {Class.NON_PERSONAL},
+    "orders.gift_recipient_name": {Class.THIRD_PARTY, Class.DIRECT},
+    "orders.gift_message": {Class.THIRD_PARTY, Class.FREE_TEXT},
+    "orders.ship_line1": {Class.DIRECT},
+    "orders.ship_city": {Class.QUASI},
+    "orders.ship_region": {Class.QUASI},
+    "orders.ship_postal": {Class.QUASI},
 
     # order_items -- not identifiers, but a grab rail or a pregnancy test says
     # more about a person than their address does.
-    "order_items.id": Class.NON_PERSONAL,
-    "order_items.order_ref": Class.QUASI,
-    "order_items.sku": Class.SENSITIVE,
-    "order_items.product_name": Class.SENSITIVE,
-    "order_items.qty": Class.NON_PERSONAL,
-    "order_items.unit_price_cents": Class.NON_PERSONAL,
+    "order_items.id": {Class.NON_PERSONAL},
+    "order_items.order_ref": {Class.QUASI},
+    "order_items.sku": {Class.SENSITIVE},
+    "order_items.product_name": {Class.SENSITIVE},
+    "order_items.qty": {Class.NON_PERSONAL},
+    "order_items.unit_price_cents": {Class.NON_PERSONAL},
 
     # shipments -- a tracking number looks opaque, but it is a public lookup
     # key that resolves to a delivery address on the carrier's own site.
-    "shipments.order_ref": Class.QUASI,
-    "shipments.carrier": Class.NON_PERSONAL,
-    "shipments.tracking_number": Class.QUASI,
-    "shipments.promised_date": Class.NON_PERSONAL,
-    "shipments.status": Class.NON_PERSONAL,
-    "shipments.last_event_at": Class.NON_PERSONAL,
-    "shipments.last_event_desc": Class.NON_PERSONAL,
-    "shipments.delivery_address_snapshot": Class.DIRECT,
+    "shipments.order_ref": {Class.QUASI},
+    "shipments.carrier": {Class.NON_PERSONAL},
+    "shipments.tracking_number": {Class.QUASI},
+    "shipments.promised_date": {Class.NON_PERSONAL},
+    "shipments.status": {Class.NON_PERSONAL},
+    "shipments.last_event_at": {Class.NON_PERSONAL},
+    "shipments.last_event_desc": {Class.NON_PERSONAL},
+    "shipments.delivery_address_snapshot": {Class.DIRECT},
 
     # tickets
-    "tickets.ticket_ref": Class.QUASI,
-    "tickets.customer_id": Class.QUASI,
-    "tickets.order_ref": Class.QUASI,
-    "tickets.subject": Class.FREE_TEXT,
-    "tickets.status": Class.NON_PERSONAL,
-    "tickets.priority": Class.NON_PERSONAL,
-    "tickets.created_at": Class.NON_PERSONAL,
-    "ticket_messages.id": Class.NON_PERSONAL,
-    "ticket_messages.ticket_ref": Class.QUASI,
-    "ticket_messages.author_type": Class.NON_PERSONAL,
-    "ticket_messages.body": Class.FREE_TEXT,
-    "ticket_messages.created_at": Class.NON_PERSONAL,
+    "tickets.ticket_ref": {Class.QUASI},
+    "tickets.customer_id": {Class.QUASI},
+    "tickets.order_ref": {Class.QUASI},
+    "tickets.subject": {Class.FREE_TEXT},
+    "tickets.status": {Class.NON_PERSONAL},
+    "tickets.priority": {Class.NON_PERSONAL},
+    "tickets.created_at": {Class.NON_PERSONAL},
+    "ticket_messages.id": {Class.NON_PERSONAL},
+    "ticket_messages.ticket_ref": {Class.QUASI},
+    "ticket_messages.author_type": {Class.NON_PERSONAL},
+    "ticket_messages.body": {Class.FREE_TEXT},
+    "ticket_messages.created_at": {Class.NON_PERSONAL},
 
     # charges
-    "charges.order_ref": Class.QUASI,
-    "charges.amount_cents": Class.NON_PERSONAL,
-    "charges.card_brand": Class.NON_PERSONAL,
-    "charges.card_last4": Class.QUASI,
-    "charges.billing_postal": Class.QUASI,
-    "charges.status": Class.NON_PERSONAL,
-    "charges.decline_reason": Class.SENSITIVE,
+    "charges.order_ref": {Class.QUASI},
+    "charges.amount_cents": {Class.NON_PERSONAL},
+    "charges.card_brand": {Class.NON_PERSONAL},
+    "charges.card_last4": {Class.QUASI},
+    "charges.billing_postal": {Class.QUASI},
+    "charges.status": {Class.NON_PERSONAL},
+    "charges.decline_reason": {Class.SENSITIVE},
 }
 
 PERSONAL = {Class.DIRECT, Class.QUASI, Class.SENSITIVE,
             Class.THIRD_PARTY, Class.FREE_TEXT}
 
 
-def classify(column: str) -> Class:
+REGISTRY: dict[str, frozenset[Class]] = {
+    column: frozenset(classes) for column, classes in _RAW.items()}
+
+# Strictest last. Ordered by the response default each class sets in the
+# article's Table 2: third-party data stays out because the caller's
+# authorisation does not extend to it; sensitive content is omitted or
+# counted; direct identifiers stay out unless the task needs them; free text
+# crosses only as a bounded, scrubbed snippet; quasi-identifiers only where
+# needed; non-personal data crosses freely.
+STRICTNESS = [Class.NON_PERSONAL, Class.QUASI, Class.FREE_TEXT,
+              Class.DIRECT, Class.SENSITIVE, Class.THIRD_PARTY]
+
+
+def classify(column: str) -> frozenset[Class]:
+    """Every class the column carries. Each class's control applies."""
     try:
         return REGISTRY[column]
     except KeyError:
         raise KeyError(f"{column} is not classified; add it to REGISTRY")
+
+
+def strictest(column: str) -> Class:
+    """The class that sets the column's response default."""
+    return max(classify(column), key=STRICTNESS.index)
+
+
+def is_personal(column: str) -> bool:
+    return bool(classify(column) & PERSONAL)
 
 
 def audit_coverage(db_path: str = DB) -> list[str]:

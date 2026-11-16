@@ -82,8 +82,8 @@ def shaped(*, returns: dict, columns: dict[str, str], purpose: str):
 
             from audit import record
             record(tool=fn.__name__, purpose=purpose, rows=rows,
-                   classes=sorted({str(classify(c)) for c in columns.values()
-                                   if classify(c) in PERSONAL}))
+                   classes=sorted({str(cls) for c in columns.values()
+                                   for cls in classify(c) & PERSONAL}))
             return shaped_result
 
         wrapper.returns = returns
